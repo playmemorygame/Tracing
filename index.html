@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>100% Reliable Precision Extractor</title>
+    <style>
+        :root { --p: #00FF00; --bg: #050505; }
+        body { font-family: 'Courier New', Courier, monospace; background: var(--bg); color: #fff; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #nav { background: #111; padding: 15px; display: flex; gap: 10px; border-bottom: 2px solid #333; justify-content: center; align-items: center; }
+        #view { flex: 1; display: flex; align-items: center; justify-content: center; background-image: conic-gradient(#111 25%, #080808 0 50%, #111 0 75%, #080808 0); background-size: 20px 20px; overflow: auto; cursor: crosshair; }
+        canvas { border: 1px solid #444; box-shadow: 0 0 50px #000; image-rendering: pixelated; }
+        .btn { padding: 12px 20px; border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
+        .btn-io { background: #333; color: white; }
+        .btn-act { background: var(--p); color: black; }
+        .btn:disabled { opacity: 0.1; cursor: not-allowed; }
+        #log { font-size: 11px; color: var(--p); min-width: 200px; text-align: center; }
+    </style>
+</head>
+<body>
+
+<div id="nav">
+    <input type="file" id="f" accept="image/*" hidden>
+    <button class="btn btn-io" onclick="document.getElementById('f').click()">1. Load Image</button>
+    <button class="btn btn-io" id="b_close" disabled onclick="seal()">2. Close Loop</button>
+    <button class="btn btn-act" id="b_cut" disabled onclick="annihilate()">3. Extract Object</button>
+    <button class="btn btn-io" onclick="save()">4. Save PNG</button>
+    <div id="log">STANDBY</div>
+</div>
+
+<div id="view">
+    <canvas id="c"></canvas>
+</div>
+
+<script>
+    const c = document.getElementById('c'), ctx = c.getContext('2d', {alpha: true});
+    const log = document.getElementById('log'), b_close = document.getElementById('b_close'), b_cut = document.getElementById('b_cut');
+    let img = null, pts = [], isSealed = false;
+    
+    // Original image buffer (Read-Only)
+    const buf = document.createElement('canvas'), bCtx = buf.getContext('2d');
+
+    document.getElementById('f').onchange = (e) => {
+        const r = new FileReader();
+        r.onload = (ev) => {
+            img = new Image();
+            img.onload = () => {
+                c.width = buf.width = img.width;
+                c.height = buf.height = img.height;
+                bCtx.drawImage(img, 0, 0);
+                pts = []; isSealed = false;
+                update();
+                log.innerText = "IMAGE LOADED. CLICK TO START TRACE.";
+            };
+            img.src = ev.target.result;
+        };
+        r.readAsDataURL(e.target.files[0]);
+    };
+
+    c.onclick = (e) => {
+        if (!img || isSealed) return;
+        const rect = c.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * (c.width / rect.width);
+        const y = (e.clientY - rect.top) * (c.height / rect.height);
+        pts.push({x, y});
+        if (pts.length >= 3) b_close.disabled = false;
+        update();
+    };
+
+    function seal() {
+        isSealed = true;
+        b_close.disabled = true;
+        b_cut.disabled = false;
+        log.innerText = "PATH SEALED. READY FOR EXTRACTION.";
+        update();
+    }
+
+    function update() {
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.drawImage(buf, 0, 0);
+        if (pts.length === 0) return;
+
+        ctx.beginPath();
+        ctx.strokeStyle = "#00FF00";
+        ctx.lineWidth = Math.max(2, c.width/400); 
+        ctx.moveTo(pts[0].x, pts[0].y);
+        pts.forEach(p => ctx.lineTo(p.x, p.y));
+        
+        if (isSealed) {
+            ctx.closePath();
+            ctx.fillStyle = "rgba(0, 255, 0, 0.3)";
+            ctx.fill();
+        }
+        ctx.stroke();
+        pts.forEach(p => {
+            ctx.fillStyle = "white";
+            ctx.fillRect(p.x-3, p.y-3, 6, 6);
+        });
+    }
+
+    function annihilate() {
+        // 1. Generate an absolute mask
+        const m = document.createElement('canvas');
+        m.width = c.width; m.height = c.height;
+        const mCtx = m.getContext('2d');
+        
+        mCtx.beginPath();
+        mCtx.moveTo(pts[0].x, pts[0].y);
+        pts.forEach(p => mCtx.lineTo(p.x, p.y));
+        mCtx.closePath();
+        mCtx.fillStyle = "white";
+        mCtx.fill();
+
+        // 2. Memory-level Pixel Extraction
+        const imgData = bCtx.getImageData(0, 0, c.width, c.height);
+        const maskData = mCtx.getImageData(0, 0, c.width, c.height);
+        const pixels = imgData.data;
+        const mask = maskData.data;
+
+        for (let i = 0; i < pixels.length; i += 4) {
+            // If the mask pixel is black (Alpha 0 or RGB 0), kill the image pixel
+            if (mask[i] === 0) {
+                pixels[i + 3] = 0; 
+            }
+        }
+
+        // 3. Final Wipe and Draw
+        ctx.clearRect(0, 0, c.width, c.height);
+        ctx.putImageData(imgData, 0, 0);
+        
+        pts = []; isSealed = false; b_cut.disabled = true;
+        log.innerText = "SUCCESS: BACKGROUND ANNIHILATED.";
+    }
+
+    function save() {
+        const link = document.createElement('a');
+        link.download = 'jake_sprite_perfect.png';
+        link.href = c.toDataURL('image/png');
+        link.click();
+    }
+</script>
+</body>
+</html>
