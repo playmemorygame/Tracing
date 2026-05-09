@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Subway Surfers Real-Feel Engine</title>
+    <style>
+        :root { --p: #00FF00; --accent: #FF00E4; }
+        body { margin: 0; background: #000; color: #fff; font-family: 'Segoe UI', sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        #header { background: #111; padding: 10px; display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; border-bottom: 2px solid #333; }
+        #stage { flex: 1; position: relative; overflow: hidden; background: linear-gradient(to bottom, #050510, #1a0b2e); }
+        canvas { width: 100%; height: 100%; image-rendering: auto; }
+        .controls { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.85); padding: 15px; border-radius: 12px; border: 1px solid var(--accent); display: flex; gap: 20px; backdrop-filter: blur(5px); }
+        .btn { padding: 8px 12px; border: none; border-radius: 5px; font-weight: bold; background: #333; color: white; font-size: 10px; cursor: pointer; text-transform: uppercase; }
+        label { font-size: 9px; color: var(--accent); font-weight: bold; text-transform: uppercase; margin-bottom: 4px; display: block; }
+        input[type="range"] { accent-color: var(--accent); width: 100px; }
+    </style>
+</head>
+<body>
+
+<div id="header">
+    <button class="btn" onclick="document.getElementById('inRoad').click()">1. LOAD ROAD TEXTURE</button>
+    <button class="btn" onclick="document.getElementById('inJake').click()">2. LOAD JAKE</button>
+    <input type="file" id="inRoad" accept="image/*" hidden>
+    <input type="file" id="inJake" accept="image/*" hidden>
+</div>
+
+<div id="stage">
+    <canvas id="c"></canvas>
+    <div class="controls">
+        <div>
+            <label>Speed</label>
+            <input type="range" id="spd" min="0" max="100" value="40">
+        </div>
+        <div>
+            <label>Track Curve</label>
+            <input type="range" id="curve" min="-100" max="100" value="0">
+        </div>
+    </div>
+</div>
+
+<script>
+    const c = document.getElementById('c'), ctx = c.getContext('2d');
+    const spdIn = document.getElementById('spd'), curveIn = document.getElementById('curve');
+    let roadImg = null, jakeImg = null;
+    let time = 0;
+
+    c.width = 1000; c.height = 1000;
+
+    function handleFile(id, target) {
+        document.getElementById(id).onchange = (e) => {
+            const r = new FileReader();
+            r.onload = (ev) => { 
+                const img = new Image(); 
+                img.onload = () => { 
+                    if(target === 'road') roadImg = img;
+                    if(target === 'jake') jakeImg = img;
+                };
+                img.src = ev.target.result; 
+            };
+            r.readAsDataURL(e.target.files[0]);
+        };
+    }
+    handleFile('inRoad', 'road');
+    handleFile('inJake', 'jake');
+
+    function animate() {
+        // 1. Clear Background with Cyberpunk Glow
+        const grad = ctx.createLinearGradient(0, 0, 0, c.height);
+        grad.addColorStop(0, '#050510');
+        grad.addColorStop(0.5, '#1a0b2e');
+        grad.addColorStop(1, '#000000');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, c.width, c.height);
+
+        const speed = spdIn.value / 5000;
+        const curveForce = curveIn.value / 1000;
+        time += speed;
+        if (time > 1) time -= 1;
+
+        // 2. Render 3D Road with Curvature
+        if (roadImg) {
+            const horizonY = 450;
+            const segments = 30; // High resolution slices
+
+            for (let i = segments; i > 0; i--) {
+                let z = ((i / segments) + time) % 1;
+                let scale = Math.pow(z, 2.5); // Exponential scaling for real depth
+                
+                let y = horizonY + (z * 550);
+                let w = c.width * 2.5 * scale;
+                
+                // The Secret "Curve" Math
+                // We offset the X position based on the square of the distance
+                let xOffset = Math.pow(z, 2) * (curveIn.value * 5);
+                let x = (c.width - w) / 2 + xOffset;
+                
+                let h = 40 * scale;
+
+                // Draw Road Segment
+                ctx.globalAlpha = Math.min(1, z * 1.5); // Fade in from distance
+                ctx.drawImage(roadImg, x, y, w, h);
+                
+                // Add Neon "Side Glow"
+                ctx.shadowBlur = 15 * scale;
+                ctx.shadowColor = '#FF00E4';
+                ctx.strokeStyle = '#FF00E4';
+                ctx.lineWidth = 5 * scale;
+                ctx.strokeRect(x, y, w, h);
+                ctx.shadowBlur = 0;
+            }
+            ctx.globalAlpha = 1.0;
+        }
+
+        // 3. Render Jake with Dynamic Bobbing & Lean
+        if (jakeImg) {
+            let bob = Math.sin(Date.now() * 0.012) * 12;
+            let lean = (curveIn.value / 200); // Jake leans into the curve
+            
+            let jW = 240;
+            let jH = (jakeImg.height / jakeImg.width) * jW;
+            
+            ctx.save();
+            ctx.translate(c.width/2, c.height - jH - 100 + bob);
+            ctx.rotate(lean);
+            ctx.drawImage(jakeImg, -jW/2, 0, jW, jH);
+            
+            // Add a small shadow under Jake
+            ctx.restore();
+            ctx.fillStyle = "rgba(0,0,0,0.5)";
+            ctx.beginPath();
+            ctx.ellipse(c.width/2, c.height - 80, 60, 20, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+</script>
+</body>
+</html>
